@@ -1,11 +1,8 @@
 from flask import Flask,  jsonify, request
 from psycopg2 import connect, extras
-from flask_cors import CORS
+from flask_cors import CORS, cross_origin
 
 app = Flask(__name__)
-app.config.from_object(__name__) 
-CORS(app, resources={r"/*": {"origins": "*"}})
-# app.config['CORS_HEADERS'] = 'Content-Type'
 
 # conexión base de datos
 host = 'localhost'
@@ -14,35 +11,53 @@ dbname = 'la trattoria'
 user = 'postgres'
 password = 'adrian'
 
+CORS(app,resources={r"/app/*":{"origins": "*"}})
+
 # función para conectar a la base de datos
 def get_connection():
     conn = connect(host=host, port=port, dbname=dbname, user=user, password=password)
     return conn
 
-
+CORS(app)
 # @app.route('/')
 # def holamundo():
 #     return 'primera pagina'
-
-# insertar pago
-@app.post("/app/insertar/pagos")
+# Insertar pago
+@cross_origin
+@app.route('/app/insertar/pagos', methods=['POST'])
 def crear_pago():
-    nuevo_pago = request.get_json()
-    new_correo = nuevo_pago["correo"]
-    new_numero_telefono = nuevo_pago["numero_telefono"]
-    new_nombre = nuevo_pago["nombre"]
-    new_fecha_expiracion = nuevo_pago["fecha_expiracion"]
-    new_cedula = nuevo_pago["cedula"]
-    conn = get_connection()
-    cursor = conn.cursor(cursor_factory=extras.RealDictCursor)
-    cursor.execute("INSERT INTO pagos_tarjeta (correo, numero_telefono, nombre, fecha_expiracion, cedula) VALUES (%s, %s, %s, %s, %s) RETURNING *",
-    (new_correo, new_numero_telefono, new_nombre,  new_fecha_expiracion, new_cedula))
-    selectPagos = cursor.fetchall()
-    conn.commit()
-    cursor.close()
-    conn.close
-    print(selectPagos)
-    return jsonify({"mensaje":"creado", "data": selectPagos})
+    try:
+        nuevo_pago = request.get_json()
+        new_correo = nuevo_pago["correo"]
+        new_numero_telefono = nuevo_pago["numero_telefono"]
+        new_nombre = nuevo_pago["nombre"]
+        new_fecha_Expiracion = nuevo_pago["fecha_Expiracion"]
+        new_cedula = nuevo_pago["cedula"]
+        new_dia=nuevo_pago["dia"]
+        new_mes=nuevo_pago["mes"]
+        new_anio=nuevo_pago["anio"]
+
+        with get_connection() as conn, conn.cursor(cursor_factory=extras.RealDictCursor) as cursor:
+            cursor.execute("INSERT INTO pagos_tarjeta (correo, numero_telefono, nombre, fecha_Expiracion, cedula, dia, mes, anio) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING *",
+                           (new_correo, new_numero_telefono, new_nombre, new_fecha_Expiracion, new_cedula, new_dia, new_mes, new_anio))
+            selectPagos = cursor.fetchall()
+
+        return jsonify({"mensaje": "creado", "data": selectPagos})
+
+    except KeyError as e:
+        return jsonify({"error": f"Falta la clave en el JSON: {str(e)}"}), 400
+    except Exception as e:
+        return handle_error(e)
+
+# Función para manejar errores
+@app.errorhandler(Exception)
+def handle_error(e):
+    # Loguear el error podría ser útil para la depuración
+    print(f"Error: {str(e)}")
+    response = jsonify(error=str(e))
+    response.status_code = 500
+    return response
+
 
 # leer datos
 @app.get("/app/ver/pagos")
